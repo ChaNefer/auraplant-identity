@@ -25,6 +25,10 @@ LOCKOUT_DURATION_MINUTES = 30
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+def _auto_verify_enabled() -> bool:
+    return os.environ.get("IDENTITY_AUTO_VERIFY", "").lower() in ("1", "true", "yes")
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -124,9 +128,12 @@ class IdentityService:
         self.session.flush()
 
         token = create_token(self.session, user, PURPOSE_VERIFY)
+        if _auto_verify_enabled():
+            user.is_active = True
+            user.email_confirmed_at = _utcnow()
         self.session.commit()
 
-        if send_email:
+        if send_email and not _auto_verify_enabled():
             link = f"{self.base_url}/auth/verify-email/{token.token}"
             try:
                 self.mailer.send(
@@ -171,17 +178,21 @@ class IdentityService:
             self.session.commit()
             raise LockedError("Account temporarily locked")
 
-        if not user.is_active or user.email_confirmed_at is None:
-            self._register_failure(user)
-            self._log_login(user.id, ip, user_agent, success=False)
-            self.session.commit()
-            raise AuthRejected("Email not confirmed")
-
         if not verify_password(user.password_hash, password):
             self._register_failure(user)
             self._log_login(user.id, ip, user_agent, success=False)
             self.session.commit()
             return None
+
+        if not user.is_active or user.email_confirmed_at is None:
+            if _auto_verify_enabled():
+                user.is_active = True
+                user.email_confirmed_at = _utcnow()
+            else:
+                self._register_failure(user)
+                self._log_login(user.id, ip, user_agent, success=False)
+                self.session.commit()
+                raise AuthRejected("Email not confirmed")
 
         user.failed_login_count = 0
         user.locked_until = None
