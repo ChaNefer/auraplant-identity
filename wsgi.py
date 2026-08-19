@@ -55,6 +55,15 @@ def create_app() -> Flask:
             {"ok": True, "service": "auraplant-identity", "module": "identity-core"}
         )
 
+    @app.errorhandler(Exception)
+    def json_errors(exc):
+        from werkzeug.exceptions import HTTPException
+
+        app.logger.exception(exc)
+        if isinstance(exc, HTTPException):
+            return jsonify({"error": exc.description or exc.name}), exc.code
+        return jsonify({"error": "Identity internal error"}), 500
+
     return app
 
 

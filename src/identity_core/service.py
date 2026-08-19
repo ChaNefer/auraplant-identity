@@ -128,11 +128,16 @@ class IdentityService:
 
         if send_email:
             link = f"{self.base_url}/auth/verify-email/{token.token}"
-            self.mailer.send(
-                norm,
-                "Confirm your email",
-                f"<p>Confirm your account:</p><p><a href=\"{link}\">{link}</a></p>",
-            )
+            try:
+                self.mailer.send(
+                    norm,
+                    "Confirm your email",
+                    f"<p>Confirm your account:</p><p><a href=\"{link}\">{link}</a></p>",
+                )
+            except Exception as exc:
+                raise IdentityError(
+                    "Nie udało się wysłać maila weryfikacyjnego. Sprawdź SendGrid."
+                ) from exc
         return user
 
     def verify_email(self, token: str) -> User:
