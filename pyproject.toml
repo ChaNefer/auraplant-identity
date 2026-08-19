@@ -25,6 +25,11 @@ dev = [
   "pytest>=8.0",
   "identity-core[flask]",
 ]
+prod = [
+  "identity-core[flask]",
+  "gunicorn>=23.0",
+  "psycopg2-binary>=2.9",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: auraplant-identity
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: FLASK_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: auraplant-identity-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: BASE_URL
+        value: https://auraplant-frontend.onrender.com
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: SENDGRID_FROM_EMAIL
+        sync: false
+
+databases:
+  - name: auraplant-identity-db
+    plan: starter
