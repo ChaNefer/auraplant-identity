@@ -26,4 +26,4 @@ services:
 
 databases:
   - name: auraplant-identity-db
-    plan: starter
+    plan: basic-256mb
