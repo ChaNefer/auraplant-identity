@@ -24,6 +24,29 @@ def _json_error(message: str, status: int = 400):
     return jsonify({"error": message}), status
 
 
+def _oauth_signer():
+    from flask import current_app
+    from itsdangerous import URLSafeTimedSerializer
+
+    return URLSafeTimedSerializer(str(current_app.secret_key), salt="auraplant-oauth")
+
+
+def _oauth_state_dumps() -> str:
+    return _oauth_signer().dumps({"n": secrets.token_urlsafe(12)})
+
+
+def _oauth_state_ok(state: str | None) -> bool:
+    if not state:
+        return False
+    from itsdangerous import BadSignature, SignatureExpired
+
+    try:
+        _oauth_signer().loads(state, max_age=15 * 60)
+        return True
+    except (BadSignature, SignatureExpired, TypeError, ValueError):
+        return False
+
+
 def create_auth_blueprint(
     *,
     session_factory,
@@ -178,7 +201,7 @@ def create_auth_blueprint(
     def oauth_google_start():
         from identity_core.oauth_google import build_authorize_url
 
-        state = secrets.token_urlsafe(24)
+        state = _oauth_state_dumps()
         session["oauth_google_state"] = state
         return redirect(build_authorize_url(state))
 
@@ -186,13 +209,18 @@ def create_auth_blueprint(
     def oauth_google_callback():
         from identity_core.oauth_google import exchange_code, fetch_userinfo, profile_from_userinfo
 
-        if request.args.get("state") != session.pop("oauth_google_state", None):
+        incoming_state = request.args.get("state")
+        session_state = session.pop("oauth_google_state", None)
+        if incoming_state != session_state and not _oauth_state_ok(incoming_state):
             return _json_error("Invalid OAuth state", 400)
         code = request.args.get("code")
         if not code:
             return _json_error("Missing code", 400)
-        tokens = exchange_code(code)
-        info = fetch_userinfo(tokens["access_token"])
+        try:
+            tokens = exchange_code(code)
+            info = fetch_userinfo(tokens["access_token"])
+        except Exception:
+            return _json_error("Google nie potwierdził logowania", 400)
         profile = profile_from_userinfo(info)
         if not profile["provider_user_id"]:
             return _json_error("Google profile missing id", 400)
